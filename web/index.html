@@ -1,0 +1,249 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Bot Control Panel</title>
+<style>
+  :root {
+    --bg: #f6f7f9; --panel: #ffffff; --text: #1d2330; --muted: #667085;
+    --border: #d9dde5; --accent: #5865f2; --accent-text: #ffffff;
+    --user-bg: #e8eaff; --bot-bg: #eef1f5; --error: #c4320a;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root {
+      --bg: #17191e; --panel: #20232a; --text: #e6e8ee; --muted: #9aa1ae;
+      --border: #343844; --accent: #7983f5; --accent-text: #0d0f14;
+      --user-bg: #2c3157; --bot-bg: #2a2e37; --error: #ff8a65;
+    }
+  }
+  * { box-sizing: border-box; }
+  body {
+    margin: 0; background: var(--bg); color: var(--text);
+    font: 15px/1.5 system-ui, -apple-system, "Segoe UI", sans-serif;
+  }
+  main {
+    max-width: 1200px; margin: 0 auto; padding: 24px 16px;
+    display: grid; gap: 16px; grid-template-columns: 1fr 1fr;
+  }
+  @media (max-width: 800px) { main { grid-template-columns: 1fr; } }
+  h1 { grid-column: 1 / -1; margin: 0; font-size: 22px; }
+  section {
+    background: var(--panel); border: 1px solid var(--border); border-radius: 10px;
+    padding: 16px; display: flex; flex-direction: column; gap: 10px; min-width: 0;
+  }
+  h2 { margin: 0; font-size: 16px; }
+  label { font-size: 13px; color: var(--muted); }
+  textarea, input, select {
+    width: 100%; font: inherit; color: var(--text); background: var(--bg);
+    border: 1px solid var(--border); border-radius: 6px; padding: 8px;
+  }
+  textarea#prompt { min-height: 260px; resize: vertical; }
+  .row { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; }
+  .row > * { flex: 1; min-width: 120px; }
+  .row > button { flex: 0 0 auto; min-width: 0; }
+  button {
+    font: inherit; border: 0; border-radius: 6px; padding: 8px 14px; cursor: pointer;
+    background: var(--accent); color: var(--accent-text); flex: 0 0 auto;
+  }
+  button.secondary { background: transparent; color: var(--text); border: 1px solid var(--border); }
+  button:disabled { opacity: .6; cursor: wait; }
+  .status { font-size: 13px; color: var(--muted); min-height: 1.5em; }
+  .status.error { color: var(--error); }
+  #log {
+    flex: 1; min-height: 320px; max-height: 60vh; overflow-y: auto;
+    display: flex; flex-direction: column; gap: 8px;
+  }
+  .msg { padding: 8px 12px; border-radius: 8px; white-space: pre-wrap; overflow-wrap: anywhere; }
+  .msg.user { background: var(--user-bg); align-self: flex-end; max-width: 85%; }
+  .msg.bot { background: var(--bot-bg); align-self: flex-start; max-width: 85%; }
+  .msg.error { color: var(--error); align-self: flex-start; }
+  .empty { color: var(--muted); font-size: 14px; }
+</style>
+</head>
+<body>
+<main>
+  <h1>Bot Control Panel</h1>
+
+  <section>
+    <h2>System prompt</h2>
+    <textarea id="prompt" spellcheck="true" placeholder="You are a friendly assistant in a Discord server..."></textarea>
+    <div class="row">
+      <div>
+        <label for="model">Model</label>
+        <select id="model"></select>
+      </div>
+      <div>
+        <label for="history">History (messages)</label>
+        <input id="history" type="number" min="0">
+      </div>
+      <div>
+        <label for="maxTokens">Max reply tokens</label>
+        <input id="maxTokens" type="number" min="1">
+      </div>
+    </div>
+    <div class="row">
+      <div>
+        <label for="temperature">Temperature (lower = calmer)</label>
+        <input id="temperature" type="number" min="0" max="2" step="0.1">
+      </div>
+      <div>
+        <label for="repeatPenalty">Repeat penalty</label>
+        <input id="repeatPenalty" type="number" min="0.5" max="2" step="0.05">
+      </div>
+    </div>
+    <div class="row">
+      <button id="save">Save</button>
+      <span class="status" id="saveStatus"></span>
+    </div>
+  </section>
+
+  <section>
+    <h2>Test chat</h2>
+    <div id="log"><div class="empty">Send a message to try the current prompt and model. This chat is separate from Discord.</div></div>
+    <form class="row" id="chatForm">
+      <input id="as" autocomplete="off" placeholder="Chat as (username)" title="Discord username to pretend to be" style="flex: 0 1 170px">
+      <input id="message" autocomplete="off" placeholder="Type a message...">
+      <button type="submit" id="send">Send</button>
+      <button type="button" class="secondary" id="clear">Clear</button>
+    </form>
+  </section>
+
+  <section style="grid-column: 1 / -1">
+    <h2>Image triggers</h2>
+    <label for="triggers">Checked before the model runs. If a message contains a <b>request word</b>, the first image whose <b>keywords</b> match is sent. With no match, the <b>fallback</b> line is sent instead. <code>send</code> is a link or a filename in the <code>images</code> folder; optional <code>text</code> is sent with it.</label>
+    <textarea id="triggers" spellcheck="false" style="min-height: 220px; font-family: ui-monospace, Consolas, monospace; font-size: 13px"></textarea>
+    <div class="row">
+      <button id="saveTriggers">Save triggers</button>
+      <span class="status" id="triggerStatus"></span>
+    </div>
+  </section>
+</main>
+
+<script>
+const $ = (id) => document.getElementById(id);
+let promptVersion = "";
+
+async function api(path, body) {
+  const opts = body === undefined ? {} : {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(body),
+  };
+  const res = await fetch(path, opts);
+  const isJson = (res.headers.get("Content-Type") || "").includes("json");
+  const data = isJson ? await res.json() : { error: await res.text() };
+  if (!res.ok) throw new Error(data.error || res.statusText);
+  return data;
+}
+
+function setStatus(text, isError) {
+  const el = $("saveStatus");
+  el.textContent = text;
+  el.className = "status" + (isError ? " error" : "");
+}
+
+async function load() {
+  const [{ prompt, version }, config, models] = await Promise.all([
+    api("/api/prompt"), api("/api/config"), api("/api/models"),
+  ]);
+  $("prompt").value = prompt;
+  promptVersion = version;
+  $("history").value = config.history_length;
+  $("maxTokens").value = config.max_reply_tokens;
+  $("temperature").value = config.temperature;
+  $("repeatPenalty").value = config.repeat_penalty;
+
+  const names = models.models.includes(config.model) ? models.models : [config.model, ...models.models];
+  $("model").innerHTML = "";
+  for (const name of names) {
+    const opt = document.createElement("option");
+    opt.value = opt.textContent = name;
+    if (!models.models.includes(name)) opt.textContent += " (not installed)";
+    $("model").append(opt);
+  }
+  $("model").value = config.model;
+  if (models.error) setStatus(models.error, true);
+}
+
+$("save").addEventListener("click", async () => {
+  $("save").disabled = true;
+  try {
+    const saved = await api("/api/prompt", { prompt: $("prompt").value, version: promptVersion });
+    promptVersion = saved.version;
+    await api("/api/config", {
+      model: $("model").value,
+      history_length: Number($("history").value),
+      max_reply_tokens: Number($("maxTokens").value),
+      temperature: Number($("temperature").value),
+      repeat_penalty: Number($("repeatPenalty").value),
+    });
+    setStatus("Saved. Applies to Discord and the test chat right away.");
+  } catch (e) {
+    setStatus(e.message, true);
+  } finally {
+    $("save").disabled = false;
+  }
+});
+
+function addMessage(text, kind) {
+  const empty = $("log").querySelector(".empty");
+  if (empty) empty.remove();
+  const div = document.createElement("div");
+  div.className = "msg " + kind;
+  div.textContent = text;
+  $("log").append(div);
+  $("log").scrollTop = $("log").scrollHeight;
+  return div;
+}
+
+$("chatForm").addEventListener("submit", async (e) => {
+  e.preventDefault();
+  const text = $("message").value.trim();
+  if (!text) return;
+  $("message").value = "";
+  const as = $("as").value.trim();
+  addMessage((as ? "@" + as.replace(/^@/, "") + ": " : "") + text, "user");
+  const pending = addMessage("…", "bot");
+  $("send").disabled = true;
+  try {
+    const { reply } = await api("/api/chat", { message: text, as });
+    pending.textContent = reply;
+  } catch (err) {
+    pending.className = "msg error";
+    pending.textContent = "⚠️ " + err.message;
+  } finally {
+    $("send").disabled = false;
+    $("message").focus();
+  }
+});
+
+$("clear").addEventListener("click", async () => {
+  await api("/api/reset", {});
+  $("log").innerHTML = '<div class="empty">History cleared.</div>';
+});
+
+load().catch((e) => setStatus(e.message, true));
+
+function setTriggerStatus(text, isError) {
+  $("triggerStatus").textContent = text;
+  $("triggerStatus").className = "status" + (isError ? " error" : "");
+}
+
+api("/api/triggers").then(({ triggers }) => { $("triggers").value = triggers; })
+  .catch((e) => setTriggerStatus(e.message, true));
+
+$("saveTriggers").addEventListener("click", async () => {
+  $("saveTriggers").disabled = true;
+  try {
+    await api("/api/triggers", { triggers: $("triggers").value });
+    setTriggerStatus("Saved. Applies right away.");
+  } catch (e) {
+    setTriggerStatus(e.message, true);
+  } finally {
+    $("saveTriggers").disabled = false;
+  }
+});
+</script>
+</body>
+</html>

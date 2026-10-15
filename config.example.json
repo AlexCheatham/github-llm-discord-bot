@@ -1,0 +1,8 @@
+{
+  "model": "llama3.2:3b",
+  "history_length": 10,
+  "max_reply_tokens": 150,
+  "temperature": 0.6,
+  "repeat_penalty": 1.1,
+  "web_port": 8080
+}

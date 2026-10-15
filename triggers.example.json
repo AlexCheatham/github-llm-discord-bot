@@ -1,0 +1,15 @@
+{
+  "request_words": ["image", "images", "pic", "picture", "photo", "draw", "generate", "make me"],
+  "images": [
+    {
+      "keywords": ["tavern", "inn"],
+      "send": "https://example.com/your-image.png",
+      "text": "*slides a picture across the bar*"
+    },
+    {
+      "keywords": ["map"],
+      "send": "map.png"
+    }
+  ],
+  "fallback": "the picture-goblin is on break. ask again never"
+}
